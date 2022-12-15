@@ -18,7 +18,6 @@ enum atomos_modes {
 
 struct atomos_event_context {
 	int 	version; 
-	void (*vblank_handler)(int fd, uint32_t sequence, uint32_t tv_sec, uint32_t tv_usec, void *user_data);
 	void (*page_flip_handler)(int fd, uint32_t sequence, uint32_t tv_sec, uint32_t tv_usec, void *user_data);
 };
 

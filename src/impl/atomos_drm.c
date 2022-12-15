@@ -1,6 +1,6 @@
-#include "include/atomos_drm.h"
-#include "include/atomos_drm.h"
-#include "include/multitouch.h"
+#include "../def/atomos_drm.h"
+#include "../def/atomos_drm.h"
+#include "../def/multitouch.h"
 
 #include <fcntl.h>
 #include <string.h>
@@ -113,12 +113,7 @@ int atomos_get_connector(int fd, int id, struct drm_mode_get_connector *conn) {
 int atomos_get_encoder(int fd, int id, struct drm_mode_get_encoder *enc) {
 	memset(enc, 0, sizeof(struct drm_mode_get_encoder));
 	enc->encoder_id = id;
-
-	if (atomos_ioctl(fd, DRM_IOCTL_MODE_GETENCODER, enc)) {
-		return -1;
-	}
-
-	return 0;
+	return atomos_ioctl(fd, DRM_IOCTL_MODE_GETENCODER, enc) ? -1 : 0;
 }
 
 
@@ -130,13 +125,11 @@ int atomos_handle_event(int fd, struct atomos_event_context *context) {
 
 	if (!len) {
 		return 0;
-	}
-
-	if (len < sizeof(struct drm_event)) {
+	} else if (len < sizeof(struct drm_event)) {
 		return -1;
 	}
 
-	int i=0; 
+	int i = 0; 
 	while(i < len) {
 		e = (struct drm_event *)&buffer[i];
 		i += e->length;

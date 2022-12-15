@@ -1,5 +1,5 @@
-#include "include/multitouch.h"
-#include "include/atomos_drm.h"
+#include "def/multitouch.h"
+#include "def/atomos_drm.h"
 
 #include <linux/input.h>
 #include <fcntl.h>
