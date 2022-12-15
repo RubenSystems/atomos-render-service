@@ -62,7 +62,8 @@ int atomui_get_modes(int fd, struct atomui_size size, struct drm_mode_card_res *
 //  Helper functions 
 uint64_t reinterpret_malloc(size_t size);
 void free_drm_mode_card_res(struct drm_mode_card_res * res); 
-void free_drm_mode_get_connector(struct drm_mode_get_connector * res);
+void free_drm_mode_get_connector(struct drm_mode_get_connector * conn);
+void free_framebuffer(struct atomui_buffer * buf);
 
 
 

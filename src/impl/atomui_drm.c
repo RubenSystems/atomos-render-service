@@ -187,3 +187,7 @@ void free_drm_mode_get_connector(struct drm_mode_get_connector * conn) {
 	free((uint32_t *)conn->props_ptr);
 	free((uint64_t *)conn->prop_values_ptr);
 } 
+
+void free_framebuffer(struct atomui_buffer * buf) {
+	munmap(buf, area_from_size(buf->size));
+}

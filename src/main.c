@@ -347,6 +347,10 @@ int set_mode(struct atomui_data *data, struct drm_mode_get_connector conn, struc
 		}
 	}
 
+	free_framebuffer(&data->framebuffer[0]);
+	free_framebuffer(&data->framebuffer[1]);
+
+
 	//after loop, restore original CRTC...
 
 	saved_crtc.count_connectors = 1;
