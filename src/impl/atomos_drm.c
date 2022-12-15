@@ -28,8 +28,6 @@ int atomos_ioctl(int fd, unsigned long request, void *arg) {
 	return ret;
 }
 
-
-//opening a device such as /dev/dri/card0
 int atomos_open(const char *device_node) {
 	int fd = open((char *)device_node, O_RDWR | O_CLOEXEC);
 
@@ -129,16 +127,13 @@ int atomos_handle_event(int fd, struct atomos_event_context *context) {
 		return -1;
 	}
 
-	int i = 0; 
-	while(i < len) {
+	for (int i = 0; i < len; i += e->length) {
 		e = (struct drm_event *)&buffer[i];
 		i += e->length;
 
-		switch(e->type) {
-			case DRM_EVENT_FLIP_COMPLETE: {
-				struct drm_event_vblank *vb = (struct drm_event_vblank *)e;
-				context->page_flip_handler(fd, vb->sequence, vb->tv_sec, vb->tv_usec, (void *)vb->user_data);
-			} break;
+		if (e->type == DRM_EVENT_FLIP_COMPLETE) {
+			struct drm_event_vblank *vb = (struct drm_event_vblank *)e;
+			context->page_flip_handler(fd, vb->sequence, vb->tv_sec, vb->tv_usec, (void *)vb->user_data);
 		}
 	}
 
