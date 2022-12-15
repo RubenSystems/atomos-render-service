@@ -110,11 +110,11 @@ int atomui_get_encoder(int fd, int id, struct drm_mode_get_encoder *enc) {
 }
 
 
-int atomui_handle_event(int fd, struct atomui_event_context *context) {
-	char buffer[1024];
+int atomui_handle_event(int fd, struct atomui_event_context *context, char * buffer) {
+	// char buffer[1024];
 	struct drm_event *e;
 
-	int len = read(fd, buffer, sizeof(buffer));
+	int len = read(fd, buffer, ATOMUI_SMALL_BUF_SIZE);
 
 	if (!len) {
 		return 0;
@@ -143,7 +143,6 @@ int atomui_get_modes(int fd, struct atomui_size size, struct drm_mode_card_res *
 		int ret = atomui_get_connector(fd, connectors[connector_index], _connector);
 
 		if (ret || _connector->connection != DRM_MODE_CONNECTED) {
-			printf("DISCOB");
 			continue;
 		}
 

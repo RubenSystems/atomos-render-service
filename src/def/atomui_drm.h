@@ -8,6 +8,8 @@
 #include "../drm/drm.h"
 
 
+#define ATOMUI_SMALL_BUF_SIZE 1024
+
 enum atomui_modes {
 	DRM_MODE_CONNECTED 		= 1,
 	DRM_MODE_DISCONNECTED 	= 2,
@@ -43,8 +45,7 @@ struct atomui_data {
 	int 					front_buf;
 
 	// TODO - R&R with atomui_size;
-	uint32_t 				width;
-	uint32_t 				height;
+	struct atomui_size 		size;
 };
 
 
@@ -55,7 +56,7 @@ int atomui_open(const char * device_node);
 int atomui_get_resources(int fd, struct drm_mode_card_res * res);
 int atomui_get_connector(int fd, int id, struct drm_mode_get_connector * conn);
 int atomui_get_encoder(int fd, int id, struct drm_mode_get_encoder *enc);
-int atomui_handle_event(int fd, struct atomui_event_context *context);
+int atomui_handle_event(int fd, struct atomui_event_context *context, char * buffer);
 int atomui_get_modes(int fd, struct atomui_size size, struct drm_mode_card_res * resource, struct drm_mode_get_connector * _connector, struct drm_mode_modeinfo * _mode);
 
 //  Helper functions 

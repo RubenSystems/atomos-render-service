@@ -16,38 +16,36 @@ struct drm_mode_crtc saved_crtc;
 
 
 int main(int argc, char **argv) {
-	printf("[ATOMUI] - MODES:\n");
+	printf("[ATOMUI] - STARTING\n");
+
+	struct drm_mode_card_res resource;
+	struct drm_mode_get_connector connector; 
+	struct drm_mode_modeinfo mode;
 
 	int fd = atomui_open("/dev/dri/card0");
-	struct drm_mode_card_res resource;
 
 	if (atomui_get_resources(fd, &resource)) {
 		printf("[ATOMUI] - Failed to open card0 resources\n");
 		return -1;
 	}
 
-	// Set the hres and vres to the cmdline args. If unset, 0
 	struct atomui_size required_size = {
 		.width = (argc == 3) ? atoi(argv[1]) : 0,
 		.height = (argc == 3) ? atoi(argv[2]) : 0
 	};
 
-
 	struct atomui_data data = {
 		.cleanup = false,
 		.pflip_pending = false,
 		.front_buf = 0,
-		.width = required_size.width,
-		.height = required_size.height,
+		.size = {
+			.width = required_size.width,
+			.height = required_size.height,
+		},
 		.fd = fd
 	};
 
-	struct drm_mode_get_connector connector; 
-	struct drm_mode_modeinfo mode;
-
 	ioctl(fd, DRM_IOCTL_SET_MASTER, 0);
-
-	printf("DRM Connectors: %d\n", resource.count_connectors);
 
 	int m_get = atomui_get_modes(fd, required_size, &resource, &connector, &mode);
 	free_drm_mode_card_res(&resource); 
@@ -58,41 +56,6 @@ int main(int argc, char **argv) {
 		ioctl(fd, DRM_IOCTL_DROP_MASTER, 0);
 		return 0;
 	}
-
-
-	// for (int i = 0; i < resource.count_connectors; i++) {
-	// 	uint32_t *connectors = (uint32_t *)resource.connector_id_ptr;
-
-	// 	struct drm_mode_get_connector conn;
-	// 	int ret = atomui_get_connector(fd, connectors[i], &conn);
-
-	// 	if (ret) {
-	// 		printf("\tFailed to get connector: %d\n", ret);
-	// 		continue;
-	// 	}
-
-	// 	//printf("Found Connector: %d - %d.  Modes %d\n", i, connectors[i], conn.count_modes);
-
-	// 	if (conn.connection != DRM_MODE_CONNECTED) {
-	// 		//printf("\tIgnoring unconnected connector. (%d)\n", conn.connection);
-	// 		continue;
-	// 	}
-
-	// 	struct drm_mode_modeinfo *modes = (struct drm_mode_modeinfo *)conn.modes_ptr;
-
-	// 	for (int m=0; m<conn.count_modes; m++) {
-	// 		printf("\tMode: %dx%d\n", modes[m].hdisplay, modes[m].vdisplay);
-
-	// 		//sleep_sec(1);
-
-	// 		if (required_size.width == modes[m].hdisplay && required_size.height == modes[m].vdisplay) {
-	// 			printf("HERE!!!!!"); 
-	// 			return set_mode(&data, conn, modes[m]);
-	// 		}
-	// 	}
-	// 	free_drm_mode_get_connector(&conn);
-	// }
-
 }
 
 bool create_framebuffer(int fd, struct atomui_buffer *buf) {
@@ -103,8 +66,8 @@ bool create_framebuffer(int fd, struct atomui_buffer *buf) {
 	memset(&creq, 0, sizeof(creq));
 	creq.width = buf->size.width;
 	creq.height = buf->size.height;
-	creq.bpp = 32;
-
+	creq.bpp = 32; // Bits per pixel (A A R R G G B B) (four bits per letter)
+ 
 
 	int ret = atomui_ioctl(fd, DRM_IOCTL_MODE_CREATE_DUMB, &creq);
 
@@ -118,8 +81,6 @@ bool create_framebuffer(int fd, struct atomui_buffer *buf) {
 
 	// TODO: - TRY OUTPUTING CREQ.SIZE and SEE IF IT IS THE SAME AS W * H
 	// buf->size = creq.size;
-
-	printf("%i\n\n", (unsigned int)creq.size);
 
 
 
@@ -152,12 +113,12 @@ bool create_framebuffer(int fd, struct atomui_buffer *buf) {
 
 	buf->map = mmap(0, area_from_size(buf->size), PROT_READ | PROT_WRITE, MAP_SHARED, fd, mreq.offset);
 
-	if (((int64_t)buf->map) == -1) {
+	if (buf->map == -1) {
 		printf("Failed to map FB!\n");
 		return false;
 	}
 
-	memset(buf->map, 0, area_from_size(buf->size));
+	// memset(buf->map, 0, area_from_size(buf->size));
 
 	return true;
 }
@@ -186,7 +147,7 @@ static void draw_data(int fd, struct atomui_data *data) {
 		start_y = multitouch_info.touch_events[finger].y;
 		for (int x = 0; x < cursor_size; x++) {
 			for (int y = 0; y < cursor_size; y++) {
-				int pos = (start_x + x) + ((start_y + y) * data->width);
+				int pos = (start_x + x) + ((start_y + y) * data->size.width);
 
 				if (pos * 4 >= area_from_size(buf->size)) {
 					break;
@@ -318,6 +279,8 @@ int set_mode(struct atomui_data *data, struct drm_mode_get_connector conn, struc
 	ev.version = 2;
 	ev.page_flip_handler = page_flip_event;
 
+	char event_buffer[ATOMUI_SMALL_BUF_SIZE];
+
 	while(true) {
 		FD_SET(0, &fds);
 		FD_SET(data->fd, &fds);
@@ -325,20 +288,13 @@ int set_mode(struct atomui_data *data, struct drm_mode_get_connector conn, struc
 
 		ret = select(multitouch_fd + 1, &fds, NULL, NULL, NULL);
 
-		if (ret < 0) {
-			printf("SELECT FAILED! %d\n", ret);
-			break;
-		}
-
-		if (FD_ISSET(0, &fds)) {
-			//user pressed key...
-
+		if (ret < 0 || FD_ISSET(0, &fds)) {
 			break;
 		}
 
 		if (FD_ISSET(data->fd, &fds)) {
 			//drawing happened on the buffer...
-			atomui_handle_event(data->fd, &ev);
+			atomui_handle_event(data->fd, &ev, event_buffer);
 		}
 
 		if (FD_ISSET(multitouch_fd, &fds)) {
