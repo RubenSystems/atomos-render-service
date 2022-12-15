@@ -50,7 +50,6 @@ int main(int argc, char **argv) {
 	int m_get = atomui_get_modes(fd, required_size, &resource, &connector, &mode);
 	free_drm_mode_card_res(&resource); 
 	if (m_get) {	
-		// WWWAAARRRNNNIINNNGGGGGGGG :: connector is memleaked free it
 		return set_mode(&data, connector, mode);
 	} else {
 		ioctl(fd, DRM_IOCTL_DROP_MASTER, 0);
@@ -349,6 +348,7 @@ int set_mode(struct atomui_data *data, struct drm_mode_get_connector conn, struc
 
 	free_framebuffer(&data->framebuffer[0]);
 	free_framebuffer(&data->framebuffer[1]);
+	free_drm_mode_get_connector(&conn);
 
 
 	//after loop, restore original CRTC...
