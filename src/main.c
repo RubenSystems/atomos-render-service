@@ -49,7 +49,7 @@ int main(int argc, char **argv) {
 	printf("DRM Connectors: %d\n", res.count_connectors);
 	// sleep(1);
 
-	for (int i=0; i<res.count_connectors; i++) {
+	for (int i = 0; i < res.count_connectors; i++) {
 		uint32_t *connectors = (uint32_t *)res.connector_id_ptr;
 
 		struct drm_mode_get_connector conn;
@@ -75,6 +75,7 @@ int main(int argc, char **argv) {
 			//sleep_sec(1);
 
 			if (hres == modes[m].hdisplay && vres == modes[m].vdisplay) {
+				printf("HERE!!!!!"); 
 				return set_mode(&data, conn, modes[m]);
 			}
 		}

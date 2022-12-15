@@ -55,31 +55,28 @@ int atomos_get_resources(int fd, struct drm_mode_card_res *res) {
 		return -1;
 	}
 
-	// Only works with 64bit pointers
-	// Check helper functions below for freeing logic 
+	// Only works with 64bit
 	if (res->count_fbs) {
-		res->fb_id_ptr = (uint64_t)malloc(res->count_fbs * sizeof(uint32_t));
+		res->fb_id_ptr = reinterpret_malloc(res->count_fbs * sizeof(uint32_t));
 		memset((void *)res->fb_id_ptr, 0, res->count_fbs * sizeof(uint32_t));
 	}
 
 	if (res->count_crtcs) {
-		res->crtc_id_ptr = (uint64_t)malloc(res->count_crtcs * sizeof(uint32_t));
+		res->crtc_id_ptr = reinterpret_malloc(res->count_crtcs * sizeof(uint32_t));
 		memset((void *)res->crtc_id_ptr, 0, res->count_crtcs * sizeof(uint32_t));
 	}
 
 	if (res->count_connectors) {
-		res->connector_id_ptr = (uint64_t)malloc(res->count_connectors * sizeof(uint32_t));
+		res->connector_id_ptr = reinterpret_malloc(res->count_connectors * sizeof(uint32_t));
 		memset((void *)res->connector_id_ptr, 0, res->count_connectors * sizeof(uint32_t));
 	}
 
 	if (res->count_encoders) {
-		res->encoder_id_ptr = (uint64_t)malloc(res->count_encoders * sizeof(uint32_t));
+		res->encoder_id_ptr = reinterpret_malloc(res->count_encoders * sizeof(uint32_t));
 		memset((void *)res->encoder_id_ptr, 0, res->count_encoders * sizeof(uint32_t));
 	}
 
-	int ior = ioctl(fd, DRM_IOCTL_MODE_GETRESOURCES, res);
-
-	return ior ? -1 : 0;
+	return ioctl(fd, DRM_IOCTL_MODE_GETRESOURCES, res) ? -1 : 0;
 }
 
 int atomos_get_connector(int fd, int id, struct drm_mode_get_connector *conn) {
@@ -92,16 +89,16 @@ int atomos_get_connector(int fd, int id, struct drm_mode_get_connector *conn) {
 
 
 	if (conn->count_props) {
-		conn->props_ptr = (uint64_t)malloc(conn->count_props * sizeof(uint32_t));
-		conn->prop_values_ptr = (uint64_t)malloc(conn->count_props * sizeof(uint64_t));
+		conn->props_ptr = reinterpret_malloc(conn->count_props * sizeof(uint32_t));
+		conn->prop_values_ptr = reinterpret_malloc(conn->count_props * sizeof(uint64_t));
 	}
 
 	if (conn->count_modes) {
-		conn->modes_ptr = (uint64_t)malloc(conn->count_modes * sizeof(struct drm_mode_modeinfo));
+		conn->modes_ptr = reinterpret_malloc(conn->count_modes * sizeof(struct drm_mode_modeinfo));
 	}
 
 	if (conn->count_encoders) {
-		conn->encoders_ptr = (uint64_t)malloc(conn->count_encoders * sizeof(uint32_t));
+		conn->encoders_ptr = reinterpret_malloc(conn->count_encoders * sizeof(uint32_t));
 	}
 
 	return ioctl(fd, DRM_IOCTL_MODE_GETCONNECTOR, conn) ? -1 : 0;
@@ -129,19 +126,29 @@ int atomos_handle_event(int fd, struct atomos_event_context *context) {
 
 	for (int i = 0; i < len; i += e->length) {
 		e = (struct drm_event *)&buffer[i];
-		i += e->length;
 
 		if (e->type == DRM_EVENT_FLIP_COMPLETE) {
 			struct drm_event_vblank *vb = (struct drm_event_vblank *)e;
 			context->page_flip_handler(fd, vb->sequence, vb->tv_sec, vb->tv_usec, (void *)vb->user_data);
+			break;
 		}
 	}
 
 	return 0;
 }
 
+int atomos_get_screen(uint32_t width, uint32_t height) { 
+
+
+}
+
 
 //  Helper Impl
+
+uint64_t reinterpret_malloc(size_t size) {
+	return (uint64_t)(uintptr_t)malloc(size);
+}
+
 void free_drm_mode_card_res(struct drm_mode_card_res * res) {
 	free((uint32_t *)res->fb_id_ptr);
 	free((uint32_t *)res->crtc_id_ptr);
@@ -149,9 +156,9 @@ void free_drm_mode_card_res(struct drm_mode_card_res * res) {
 	free((uint32_t *)res->encoder_id_ptr);
 }
 
-void free_drm_mode_get_connector(struct drm_mode_get_connector * res) {
-	free((uint32_t *)res->encoders_ptr);
-	free((uint32_t *)res->modes_ptr);
-	free((uint32_t *)res->props_ptr);
-	free((uint32_t *)res->prop_values_ptr);
+void free_drm_mode_get_connector(struct drm_mode_get_connector * conn) {
+	free((uint32_t *)conn->encoders_ptr);
+	free((uint32_t *)conn->modes_ptr);
+	free((uint32_t *)conn->props_ptr);
+	free((uint32_t *)conn->prop_values_ptr);
 } 

@@ -51,8 +51,10 @@ int atomos_open(const char * device_node);
 int atomos_get_resources(int fd, struct drm_mode_card_res * res);
 int atomos_get_connector(int fd, int id, struct drm_mode_get_connector * conn);
 int atomos_get_encoder(int fd, int id, struct drm_mode_get_encoder *enc);
+int atomos_get_screen(uint32_t width, uint32_t height);
 
 //  Helper functions 
+uint64_t reinterpret_malloc(size_t size);
 void free_drm_mode_card_res(struct drm_mode_card_res * res); 
 void free_drm_mode_get_connector(struct drm_mode_get_connector * res);
 
