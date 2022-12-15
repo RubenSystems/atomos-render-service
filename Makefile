@@ -1,5 +1,5 @@
 CC = gcc
-C_OBJ = src/impl/atomos_drm.c
+C_OBJ = src/impl/atomui_drm.c
 MAIN = src/main.c
 TARGET = atomui
 FLAGS = -O3 -Wno-int-to-pointer-cast

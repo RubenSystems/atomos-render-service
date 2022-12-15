@@ -1,5 +1,5 @@
-#include "def/multitouch.h"
-#include "def/atomos_drm.h"
+#include "def/atomui_multitouch.h"
+#include "def/atomui_drm.h"
 
 #include <linux/input.h>
 #include <fcntl.h>
@@ -11,17 +11,17 @@
 #include <unistd.h>
 
 
-struct atomos_multitouch_info multitouch_info; 
+struct atomui_multitouch_info multitouch_info; 
 struct drm_mode_crtc saved_crtc;
 
 
 int main(int argc, char **argv) {
 	printf("DRM modes:\n");
 
-	int fd = atomos_open("/dev/dri/card0");
+	int fd = atomui_open("/dev/dri/card0");
 	struct drm_mode_card_res res;
 
-	if (atomos_get_resources(fd, &res)) {
+	if (atomui_get_resources(fd, &res)) {
 		printf("Failed to open card0 resources\n");
 		return -1;
 	}
@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
 		printf("Attempting to set res: %dx%d\n", hres, vres);
 	}
 
-	struct atomos_data data;
+	struct atomui_data data;
 	data.cleanup = false;
 	data.pflip_pending = false;
 	data.front_buf = 0;
@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
 		uint32_t *connectors = (uint32_t *)res.connector_id_ptr;
 
 		struct drm_mode_get_connector conn;
-		int ret = atomos_get_connector(fd, connectors[i], &conn);
+		int ret = atomui_get_connector(fd, connectors[i], &conn);
 
 		if (ret) {
 			printf("\tFailed to get connector: %d\n", ret);
@@ -88,7 +88,7 @@ int main(int argc, char **argv) {
 	return 0;
 }
 
-bool create_framebuffer(int fd, struct atomos_buffer *buf) {
+bool create_framebuffer(int fd, struct atomui_buffer *buf) {
 	struct drm_mode_create_dumb creq;
 	struct drm_mode_create_dumb dreq;
 	struct drm_mode_map_dumb mreq;
@@ -98,7 +98,7 @@ bool create_framebuffer(int fd, struct atomos_buffer *buf) {
 	creq.height = buf->height;
 	creq.bpp = 32;
 
-	int ret = atomos_ioctl(fd, DRM_IOCTL_MODE_CREATE_DUMB, &creq);
+	int ret = atomui_ioctl(fd, DRM_IOCTL_MODE_CREATE_DUMB, &creq);
 
 	if (ret < 0) {
 		printf("Failed to create buffer: %d\n", ret);
@@ -118,7 +118,7 @@ bool create_framebuffer(int fd, struct atomos_buffer *buf) {
 	fbcmd.pitch = buf->stride;
 	fbcmd.handle = buf->handle;
 
-	ret = atomos_ioctl(fd, DRM_IOCTL_MODE_ADDFB, &fbcmd);
+	ret = atomui_ioctl(fd, DRM_IOCTL_MODE_ADDFB, &fbcmd);
 
 	if (ret < 0) {
 		printf("Failed to add FB: %d\n", ret);
@@ -129,7 +129,7 @@ bool create_framebuffer(int fd, struct atomos_buffer *buf) {
 	memset(&mreq, 0, sizeof(mreq));
 	mreq.handle = buf->handle;
 
-	ret = atomos_ioctl(fd, DRM_IOCTL_MODE_MAP_DUMB, &mreq);
+	ret = atomui_ioctl(fd, DRM_IOCTL_MODE_MAP_DUMB, &mreq);
 
 	if (ret) {
 		printf("Failed to map FB: %d\n", ret);
@@ -153,8 +153,8 @@ uint32_t bg_color = 0xFFFFFFFF ;//AARRGGBB
 uint32_t cursor_color = 0xFF333333;
 
 
-static void draw_data(int fd, struct atomos_data *data) {
-	struct atomos_buffer *buf = &data->framebuffer[data->front_buf ^ 1];
+static void draw_data(int fd, struct atomui_data *data) {
+	struct atomui_buffer *buf = &data->framebuffer[data->front_buf ^ 1];
 
 	uint32_t *p = (uint32_t *)buf->map;
 	
@@ -164,7 +164,7 @@ static void draw_data(int fd, struct atomos_data *data) {
 	}
 
 	int start_x, start_y;
-	for (int finger = 0; finger < sizeof(multitouch_info.touch_events) / sizeof(struct atomos_touch_event); finger ++) {
+	for (int finger = 0; finger < sizeof(multitouch_info.touch_events) / sizeof(struct atomui_touch_event); finger ++) {
 		if (!multitouch_info.touch_events[finger].active) {
 			continue;
 		}
@@ -189,7 +189,7 @@ static void draw_data(int fd, struct atomos_data *data) {
 	flip.flags = DRM_MODE_PAGE_FLIP_EVENT;
 	flip.reserved = 0;
 
-	int ret = atomos_ioctl(fd, DRM_IOCTL_MODE_PAGE_FLIP, &flip);
+	int ret = atomui_ioctl(fd, DRM_IOCTL_MODE_PAGE_FLIP, &flip);
 
 	if (!ret) {
 		data->pflip_pending = true;
@@ -200,7 +200,7 @@ static void draw_data(int fd, struct atomos_data *data) {
 }
 
 static void page_flip_event(int fd, uint32_t frame, uint32_t sec, uint32_t usec, void *data) {
-	struct atomos_data *dev = data;
+	struct atomui_data *dev = data;
 	dev->pflip_pending = false;
 
 	if (!dev->cleanup) {
@@ -211,7 +211,7 @@ static void page_flip_event(int fd, uint32_t frame, uint32_t sec, uint32_t usec,
 
 
 
-int set_mode(struct atomos_data *data, struct drm_mode_get_connector conn, struct drm_mode_modeinfo mode) {
+int set_mode(struct atomui_data *data, struct drm_mode_get_connector conn, struct drm_mode_modeinfo mode) {
 	if (!conn.encoder_id) {
 		printf("No encoder found!\n");
 		return -1;
@@ -220,7 +220,7 @@ int set_mode(struct atomos_data *data, struct drm_mode_get_connector conn, struc
 	struct drm_mode_get_encoder enc;
 	int ret = 0;
 
-	if (ret = atomos_get_encoder(data->fd, conn.encoder_id, &enc)) {
+	if (ret = atomui_get_encoder(data->fd, conn.encoder_id, &enc)) {
 		printf("Encoder load failed: %d, %d - %d - %X\n", ret, data->fd, conn.encoder_id, &enc);
 		return -1;
 	}
@@ -237,7 +237,7 @@ int set_mode(struct atomos_data *data, struct drm_mode_get_connector conn, struc
 
 
 
-	memset(&multitouch_info.touch_events, 0, sizeof(multitouch_info.touch_events) / sizeof(struct atomos_touch_event));
+	memset(&multitouch_info.touch_events, 0, sizeof(multitouch_info.touch_events) / sizeof(struct atomui_touch_event));
 	multitouch_info.max_x = mode.hdisplay;
 	multitouch_info.max_y = mode.vdisplay;
 	multitouch_info.current_touch_slot = 0;
@@ -263,7 +263,7 @@ int set_mode(struct atomos_data *data, struct drm_mode_get_connector conn, struc
 	data->crt_id = enc.crtc_id;
 
 	//get the current CRTC, should be FB controller.
-	ret = atomos_ioctl(data->fd, DRM_IOCTL_MODE_GETCRTC, &crtc);
+	ret = atomui_ioctl(data->fd, DRM_IOCTL_MODE_GETCRTC, &crtc);
 	saved_crtc = crtc;
 
 	printf("Get CRTC: %d = %d (%d, %d, %x, %s)\n", crtc.crtc_id, ret, crtc.fb_id, crtc.count_connectors, crtc.set_connectors_ptr, crtc.mode.name);
@@ -286,7 +286,7 @@ int set_mode(struct atomos_data *data, struct drm_mode_get_connector conn, struc
 	// sleep(4);
 
 	//about to set mode...
-	ret = atomos_ioctl(data->fd, DRM_IOCTL_MODE_SETCRTC, &crtc);
+	ret = atomui_ioctl(data->fd, DRM_IOCTL_MODE_SETCRTC, &crtc);
 
 	if (ret) {
 		printf("FAILED TO SET CRTC! %d\n", ret);
@@ -299,7 +299,7 @@ int set_mode(struct atomos_data *data, struct drm_mode_get_connector conn, struc
 	fd_set fds;
 	FD_ZERO(&fds);
 
-	struct atomos_event_context ev;
+	struct atomui_event_context ev;
 	memset(&ev, 0, sizeof(ev));
 	ev.version = 2;
 	ev.page_flip_handler = page_flip_event;
@@ -324,7 +324,7 @@ int set_mode(struct atomos_data *data, struct drm_mode_get_connector conn, struc
 
 		if (FD_ISSET(data->fd, &fds)) {
 			//drawing happened on the buffer...
-			atomos_handle_event(data->fd, &ev);
+			atomui_handle_event(data->fd, &ev);
 		}
 
 		if (FD_ISSET(multitouch_fd, &fds)) {
@@ -383,7 +383,7 @@ int set_mode(struct atomos_data *data, struct drm_mode_get_connector conn, struc
 	saved_crtc.mode_valid = 1;
 	saved_crtc.set_connectors_ptr = (uint64_t)&conn.connector_id;
 
-	ret = atomos_ioctl(data->fd, DRM_IOCTL_MODE_SETCRTC, &saved_crtc);
+	ret = atomui_ioctl(data->fd, DRM_IOCTL_MODE_SETCRTC, &saved_crtc);
 
 	ioctl(data->fd, DRM_IOCTL_DROP_MASTER, 0);
 

@@ -5,24 +5,26 @@
 #include "../drm/drm_mode.h"
 #include "../drm/drm.h"
 
-struct atomos_get_cap {
-	uint64_t capability;
-	uint64_t value;
-};
 
-enum atomos_modes {
+enum atomui_modes {
 	DRM_MODE_CONNECTED 		= 1,
 	DRM_MODE_DISCONNECTED 	= 2,
 	DRM_MODE_UNKNOWN 		= 3
 };
 
-struct atomos_event_context {
+struct atomui_event_context {
 	int 	version; 
 	void (*page_flip_handler)(int fd, uint32_t sequence, uint32_t tv_sec, uint32_t tv_usec, void *user_data);
 };
 
 
-struct atomos_buffer {
+struct atomui_get_capabilities {
+	uint64_t capability;
+	uint64_t value;
+};
+
+
+struct atomui_buffer {
 	uint32_t 	width;
 	uint32_t 	height;
 	uint32_t 	stride;
@@ -32,9 +34,9 @@ struct atomos_buffer {
 	uint32_t 	fb;
 };
 
-struct atomos_data {
+struct atomui_data {
 	int 					fd;
-	struct atomos_buffer 	framebuffer[2];
+	struct atomui_buffer 	framebuffer[2];
 	uint32_t 				crt_id;
 	bool 					pflip_pending;
 	bool 					cleanup;
@@ -44,14 +46,14 @@ struct atomos_data {
 };
 
 
-int set_mode(struct atomos_data *, struct drm_mode_get_connector, struct drm_mode_modeinfo);
+int set_mode(struct atomui_data *, struct drm_mode_get_connector, struct drm_mode_modeinfo);
 
-int atomos_ioctl(int fd, unsigned long request, void * arg);
-int atomos_open(const char * device_node);
-int atomos_get_resources(int fd, struct drm_mode_card_res * res);
-int atomos_get_connector(int fd, int id, struct drm_mode_get_connector * conn);
-int atomos_get_encoder(int fd, int id, struct drm_mode_get_encoder *enc);
-int atomos_get_screen(uint32_t width, uint32_t height);
+int atomui_ioctl(int fd, unsigned long request, void * arg);
+int atomui_open(const char * device_node);
+int atomui_get_resources(int fd, struct drm_mode_card_res * res);
+int atomui_get_connector(int fd, int id, struct drm_mode_get_connector * conn);
+int atomui_get_encoder(int fd, int id, struct drm_mode_get_encoder *enc);
+int atomui_get_modes(uint32_t width, uint32_t height);
 
 //  Helper functions 
 uint64_t reinterpret_malloc(size_t size);
