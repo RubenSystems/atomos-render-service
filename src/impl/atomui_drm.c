@@ -135,66 +135,32 @@ int atomui_handle_event(int fd, struct atomui_event_context *context) {
 	return 0;
 }
 
-// int atomui_get_modes(uint32_t h_res, uint32_t v_res, struct atomui_data & data, struct) { 
-	// printf("DRM modes:\n");
 
-	// int fd = atomui_open("/dev/dri/card0");
-	// struct drm_mode_card_res res;
+int atomui_get_modes(int fd, struct atomui_size size, struct drm_mode_card_res * resource, struct drm_mode_get_connector * _connector, struct drm_mode_modeinfo * _mode) {
+	for (int connector_index = 0; connector_index < resource->count_connectors; connector_index++) {
+		uint32_t * connectors = (uint32_t *)resource->connector_id_ptr;
 
-	// if (atomui_get_resources(fd, &res)) {
-	// 	printf("Failed to open card0 resources\n");
-	// 	return -1;
-	// }
+		int ret = atomui_get_connector(fd, connectors[connector_index], _connector);
 
-	// struct atomui_data data = {
-	// 	.cleanup = false;
-	// 	.pflip_pending = false;
-	// 	.front_buf = 0;
-	// 	.width = hres;
-	// 	.height = vres;
-	// 	.fd = fd;
-	// };
-	
-	// ioctl(fd, DRM_IOCTL_SET_MASTER, 0);
+		if (ret || _connector->connection != DRM_MODE_CONNECTED) {
+			printf("DISCOB");
+			continue;
+		}
 
-	// printf("DRM Connectors: %d\n", res.count_connectors);
-	// // sleep(1);
+		struct drm_mode_modeinfo * modes = (struct drm_mode_modeinfo *)_connector->modes_ptr;
 
-	// for (int i = 0; i < res.count_connectors; i++) {
-	// 	uint32_t *connectors = (uint32_t *)res.connector_id_ptr;
+		for (int mode_index = 0; mode_index < _connector->count_modes; mode_index ++) {
+			printf("\t[ATOMUI] - mode: %dx%d\n", modes[mode_index].hdisplay, modes[mode_index].vdisplay);
 
-	// 	struct drm_mode_get_connector conn;
-	// 	int ret = atomui_get_connector(fd, connectors[i], &conn);
-
-	// 	if (ret) {
-	// 		printf("\tFailed to get connector: %d\n", ret);
-	// 		continue;
-	// 	} else if (conn.connection != DRM_MODE_CONNECTED) {
-	// 		//printf("\tIgnoring unconnected connector. (%d)\n", conn.connection);
-	// 		continue;
-	// 	}
-
-	// 	struct drm_mode_modeinfo *modes = (struct drm_mode_modeinfo *)conn.modes_ptr;
-
-	// 	for (int m=0; m<conn.count_modes; m++) {
-	// 		printf("\tMode: %dx%d\n", modes[m].hdisplay, modes[m].vdisplay);
-
-	// 		//sleep_sec(1);
-
-	// 		if (hres == modes[m].hdisplay && vres == modes[m].vdisplay) {
-	// 			printf("HERE!!!!!"); 
-	// 			return set_mode(&data, conn, modes[m]);
-	// 		}
-	// 	}
-	// 	free_drm_mode_get_connector(&conn);
-	// }
-
-	// ioctl(fd, DRM_IOCTL_DROP_MASTER, 0);
-
-	// free_drm_mode_card_res(&res); 
-	// return 0;
-
-// }
+			if (size.width == modes[mode_index].hdisplay && size.height == modes[mode_index].vdisplay) {
+				*_mode = ((struct drm_mode_modeinfo *)_connector->modes_ptr)[mode_index];
+				return 1;
+			}
+		}
+		free_drm_mode_get_connector(_connector);
+	}
+	return -1; 
+}
 
 
 //  Helper Impl

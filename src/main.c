@@ -16,76 +16,83 @@ struct drm_mode_crtc saved_crtc;
 
 
 int main(int argc, char **argv) {
-	printf("DRM modes:\n");
+	printf("[ATOMUI] - MODES:\n");
 
 	int fd = atomui_open("/dev/dri/card0");
-	struct drm_mode_card_res res;
+	struct drm_mode_card_res resource;
 
-	if (atomui_get_resources(fd, &res)) {
-		printf("Failed to open card0 resources\n");
+	if (atomui_get_resources(fd, &resource)) {
+		printf("[ATOMUI] - Failed to open card0 resources\n");
 		return -1;
 	}
 
-	int hres = 0;
-	int vres = 0;
+	// Set the hres and vres to the cmdline args. If unset, 0
+	struct atomui_size required_size = {
+		.width = (argc == 3) ? atoi(argv[1]) : 0,
+		.height = (argc == 3) ? atoi(argv[2]) : 0
+	};
 
-	if (argc == 3) {
-		hres = atoi(argv[1]);
-		vres = atoi(argv[2]);
 
-		printf("Attempting to set res: %dx%d\n", hres, vres);
-	}
+	struct atomui_data data = {
+		.cleanup = false,
+		.pflip_pending = false,
+		.front_buf = 0,
+		.width = required_size.width,
+		.height = required_size.height,
+		.fd = fd
+	};
 
-	struct atomui_data data;
-	data.cleanup = false;
-	data.pflip_pending = false;
-	data.front_buf = 0;
-	data.width = hres;
-	data.height = vres;
-	data.fd = fd;
+	struct drm_mode_get_connector connector; 
+	struct drm_mode_modeinfo mode;
 
 	ioctl(fd, DRM_IOCTL_SET_MASTER, 0);
 
-	printf("DRM Connectors: %d\n", res.count_connectors);
-	// sleep(1);
+	printf("DRM Connectors: %d\n", resource.count_connectors);
 
-	for (int i = 0; i < res.count_connectors; i++) {
-		uint32_t *connectors = (uint32_t *)res.connector_id_ptr;
-
-		struct drm_mode_get_connector conn;
-		int ret = atomui_get_connector(fd, connectors[i], &conn);
-
-		if (ret) {
-			printf("\tFailed to get connector: %d\n", ret);
-			continue;
-		}
-
-		//printf("Found Connector: %d - %d.  Modes %d\n", i, connectors[i], conn.count_modes);
-
-		if (conn.connection != DRM_MODE_CONNECTED) {
-			//printf("\tIgnoring unconnected connector. (%d)\n", conn.connection);
-			continue;
-		}
-
-		struct drm_mode_modeinfo *modes = (struct drm_mode_modeinfo *)conn.modes_ptr;
-
-		for (int m=0; m<conn.count_modes; m++) {
-			printf("\tMode: %dx%d\n", modes[m].hdisplay, modes[m].vdisplay);
-
-			//sleep_sec(1);
-
-			if (hres == modes[m].hdisplay && vres == modes[m].vdisplay) {
-				printf("HERE!!!!!"); 
-				return set_mode(&data, conn, modes[m]);
-			}
-		}
-		free_drm_mode_get_connector(&conn);
+	int m_get = atomui_get_modes(fd, required_size, &resource, &connector, &mode);
+	free_drm_mode_card_res(&resource); 
+	if (m_get) {	
+		// WWWAAARRRNNNIINNNGGGGGGGG :: connector is memleaked free it
+		return set_mode(&data, connector, mode);
+	} else {
+		ioctl(fd, DRM_IOCTL_DROP_MASTER, 0);
+		return 0;
 	}
 
-	ioctl(fd, DRM_IOCTL_DROP_MASTER, 0);
 
-	free_drm_mode_card_res(&res); 
-	return 0;
+	// for (int i = 0; i < resource.count_connectors; i++) {
+	// 	uint32_t *connectors = (uint32_t *)resource.connector_id_ptr;
+
+	// 	struct drm_mode_get_connector conn;
+	// 	int ret = atomui_get_connector(fd, connectors[i], &conn);
+
+	// 	if (ret) {
+	// 		printf("\tFailed to get connector: %d\n", ret);
+	// 		continue;
+	// 	}
+
+	// 	//printf("Found Connector: %d - %d.  Modes %d\n", i, connectors[i], conn.count_modes);
+
+	// 	if (conn.connection != DRM_MODE_CONNECTED) {
+	// 		//printf("\tIgnoring unconnected connector. (%d)\n", conn.connection);
+	// 		continue;
+	// 	}
+
+	// 	struct drm_mode_modeinfo *modes = (struct drm_mode_modeinfo *)conn.modes_ptr;
+
+	// 	for (int m=0; m<conn.count_modes; m++) {
+	// 		printf("\tMode: %dx%d\n", modes[m].hdisplay, modes[m].vdisplay);
+
+	// 		//sleep_sec(1);
+
+	// 		if (required_size.width == modes[m].hdisplay && required_size.height == modes[m].vdisplay) {
+	// 			printf("HERE!!!!!"); 
+	// 			return set_mode(&data, conn, modes[m]);
+	// 		}
+	// 	}
+	// 	free_drm_mode_get_connector(&conn);
+	// }
+
 }
 
 bool create_framebuffer(int fd, struct atomui_buffer *buf) {
@@ -94,9 +101,10 @@ bool create_framebuffer(int fd, struct atomui_buffer *buf) {
 	struct drm_mode_map_dumb mreq;
 
 	memset(&creq, 0, sizeof(creq));
-	creq.width = buf->width;
-	creq.height = buf->height;
+	creq.width = buf->size.width;
+	creq.height = buf->size.height;
 	creq.bpp = 32;
+
 
 	int ret = atomui_ioctl(fd, DRM_IOCTL_MODE_CREATE_DUMB, &creq);
 
@@ -106,13 +114,19 @@ bool create_framebuffer(int fd, struct atomui_buffer *buf) {
 	}
 
 	buf->stride = creq.pitch;
-	buf->size = creq.size;
 	buf->handle = creq.handle;
+
+	// TODO: - TRY OUTPUTING CREQ.SIZE and SEE IF IT IS THE SAME AS W * H
+	// buf->size = creq.size;
+
+	printf("%i\n\n", (unsigned int)creq.size);
+
+
 
 	struct drm_mode_fb_cmd fbcmd;
 	memset(&fbcmd, 0, sizeof(fbcmd));
-	fbcmd.width = buf->width;
-	fbcmd.height = buf->height;
+	fbcmd.width = buf->size.width;
+	fbcmd.height = buf->size.height;
 	fbcmd.depth = 24;
 	fbcmd.bpp = 32;
 	fbcmd.pitch = buf->stride;
@@ -136,14 +150,14 @@ bool create_framebuffer(int fd, struct atomui_buffer *buf) {
 		return false;
 	}
 
-	buf->map = mmap(0, buf->size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, mreq.offset);
+	buf->map = mmap(0, area_from_size(buf->size), PROT_READ | PROT_WRITE, MAP_SHARED, fd, mreq.offset);
 
 	if (((int64_t)buf->map) == -1) {
 		printf("Failed to map FB!\n");
 		return false;
 	}
 
-	memset(buf->map, 0, buf->size);
+	memset(buf->map, 0, area_from_size(buf->size));
 
 	return true;
 }
@@ -159,7 +173,7 @@ static void draw_data(int fd, struct atomui_data *data) {
 	uint32_t *p = (uint32_t *)buf->map;
 	
 	//clear background.
-	for (int i = 0; i < buf->size / 4; i ++) {
+	for (int i = 0; i < area_from_size(buf->size) / 4; i ++) {
 		p[i] = bg_color;
 	}
 
@@ -174,7 +188,7 @@ static void draw_data(int fd, struct atomui_data *data) {
 			for (int y = 0; y < cursor_size; y++) {
 				int pos = (start_x + x) + ((start_y + y) * data->width);
 
-				if (pos * 4 >= buf->size) {
+				if (pos * 4 >= area_from_size(buf->size)) {
 					break;
 				}
 				p[pos] = cursor_color;
@@ -230,10 +244,10 @@ int set_mode(struct atomui_data *data, struct drm_mode_get_connector conn, struc
 		return -1;
 	}
 
-	data->framebuffer[0].width = mode.hdisplay;
-	data->framebuffer[0].height = mode.vdisplay;
-	data->framebuffer[1].width = mode.hdisplay;
-	data->framebuffer[1].height = mode.vdisplay;
+	data->framebuffer[0].size.width = mode.hdisplay;
+	data->framebuffer[0].size.height = mode.vdisplay;
+	data->framebuffer[1].size.width = mode.hdisplay;
+	data->framebuffer[1].size.height = mode.vdisplay;
 
 
 
