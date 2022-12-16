@@ -66,7 +66,7 @@ uint32_t cursor_color = 0xFF333333;
 static void draw_data(int fd, struct atomui_data *data) {
 	struct atomui_buffer *buf = &data->framebuffer[data->front_buf ^ 1];
 
-	uint32_t *p = (uint32_t *)buf->map;
+	uint32_t * p = (uint32_t *)buf->map;
 	
 	//clear background.
 	for (int i = 0; i < area_from_size(buf->size) / 4; i ++) {
@@ -95,7 +95,7 @@ static void draw_data(int fd, struct atomui_data *data) {
 	struct drm_mode_crtc_page_flip flip;
 	flip.fb_id = buf->fb;
 	flip.crtc_id = data->crt_id;
-	flip.user_data = (uint64_t)data;
+	flip.user_data = (uint64_t)(uintptr_t)data;
 	flip.flags = DRM_MODE_PAGE_FLIP_EVENT;
 	flip.reserved = 0;
 
@@ -124,18 +124,23 @@ static void request_render(int fd, uint32_t frame, uint32_t sec, uint32_t usec, 
 
 int set_mode(struct atomui_data * data, struct drm_mode_get_connector conn, struct drm_mode_modeinfo mode) {
 
+	// Present
 	struct atomui_size mode_size = {
 		.width = mode.hdisplay,
 		.height = mode.vdisplay 
 	};
-	struct drm_mode_get_encoder enc;
-	int ret = 0;
+	struct atomui_render_context ev = { 
+		.render_handler = request_render 
+	};
 
+	// yet to come 
+	struct drm_mode_get_encoder enc;
+	struct drm_mode_crtc crtc;
 
 	// Check for issues
 	if (
 		!conn.encoder_id												||
-		(ret = atomui_get_encoder(data->fd, conn.encoder_id, &enc)) 	|| 
+		atomui_get_encoder(data->fd, conn.encoder_id, &enc)			 	|| 
 		!enc.crtc_id 													||
 		!atuomui_create_dual_framebuffer(data, mode_size)
 	) {
@@ -145,17 +150,12 @@ int set_mode(struct atomui_data * data, struct drm_mode_get_connector conn, stru
 	}
 
 
+	// Set stuff up
 	int multitouch_fd = open("/dev/input/event0", O_RDONLY);
 	atomui_init_multitouch(&multitouch_info, mode_size);
 
-	struct drm_mode_crtc crtc;
-	memset(&crtc, 0, sizeof(crtc));
-	crtc.crtc_id = enc.crtc_id;
+	
 	data->crt_id = enc.crtc_id;
-
-	//get the current CRTC, should be FB controller.
-	ret = atomui_ioctl(data->fd, DRM_IOCTL_MODE_GETCRTC, &crtc);
-	saved_crtc = crtc;
 
 	memset(&crtc, 0, sizeof(crtc));
 	memmove(&crtc.mode, &mode, sizeof(mode));
@@ -164,16 +164,12 @@ int set_mode(struct atomui_data * data, struct drm_mode_get_connector conn, stru
 	crtc.y = 0;
 	crtc.fb_id = data->framebuffer[0].fb;
 	crtc.count_connectors = 1;
-	crtc.set_connectors_ptr = (uint64_t)&conn.connector_id;
+	crtc.set_connectors_ptr = (uint64_t)(uintptr_t)&conn.connector_id;
 	crtc.mode_valid = 1;
 
-	
-	//about to set mode...
-	ret = atomui_ioctl(data->fd, DRM_IOCTL_MODE_SETCRTC, &crtc);
-
-	if (ret) {
-		printf("FAILED TO SET CRTC! %d\n", ret);
-		return ret;
+	if (atomui_ioctl(data->fd, DRM_IOCTL_MODE_SETCRTC, &crtc)) {
+		printf("FAILED TO SET CRTC");
+		return -1;
 	}
 
 
@@ -181,12 +177,6 @@ int set_mode(struct atomui_data * data, struct drm_mode_get_connector conn, stru
 
 	fd_set fds;
 	FD_ZERO(&fds);
-
-	struct atomui_render_context ev;
-	memset(&ev, 0, sizeof(ev));
-	ev.version = 2;
-	ev.render_handler = request_render;
-
 
 	char event_buffer[ATOMUI_SMALL_BUF_SIZE];
 	struct input_event multitouch_event_buffer [64];
@@ -196,14 +186,12 @@ int set_mode(struct atomui_data * data, struct drm_mode_get_connector conn, stru
 		FD_SET(data->fd, &fds);
 		FD_SET(multitouch_fd, &fds);
 
-		ret = select(multitouch_fd + 1, &fds, NULL, NULL, NULL);
-
-		if (ret < 0 || FD_ISSET(0, &fds)) {
+		if (select(multitouch_fd + 1, &fds, NULL, NULL, NULL) < 0 || FD_ISSET(0, &fds)) {
 			break;
 		}
 
 		if (FD_ISSET(data->fd, &fds)) {
-			//drawing happened on the buffer...
+			// request a render
 			atomui_handle_event(data->fd, &ev, event_buffer);
 		}
 
@@ -215,22 +203,11 @@ int set_mode(struct atomui_data * data, struct drm_mode_get_connector conn, stru
 		}
 	}
 
+	// Cleanup
 	free_framebuffer(&data->framebuffer[0]);
 	free_framebuffer(&data->framebuffer[1]);
 	free_drm_mode_get_connector(&conn);
-
-
-	//after loop, restore original CRTC...
-
-	saved_crtc.count_connectors = 1;
-	saved_crtc.mode_valid = 1;
-	saved_crtc.set_connectors_ptr = (uint64_t)&conn.connector_id;
-
-	ret = atomui_ioctl(data->fd, DRM_IOCTL_MODE_SETCRTC, &saved_crtc);
-
-	ioctl(data->fd, DRM_IOCTL_DROP_MASTER, 0);
-
 	close(data->fd);
 
-	return 0;
+	return 0; // this line of code returns zero
 }

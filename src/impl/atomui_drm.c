@@ -213,7 +213,7 @@ bool atomui_create_framebuffer(int fd, struct atomui_buffer *buf) {
 
 	buf->map = mmap(0, area_from_size(buf->size), PROT_READ | PROT_WRITE, MAP_SHARED, fd, mreq.offset);
 
-	if (buf->map == -1) {
+	if ((uintptr_t)buf->map == -1) {
 		printf("Failed to map FB!\n");
 		return false;
 	}
