@@ -1,5 +1,5 @@
 # AtomOS_UI
-The user interface functionality for AtomosphereOS 
+User interface functionality for AtomosphereOS
 
 Will soon come with a UI framework for displaying views on operating systems with the lunix kernal. 
 
