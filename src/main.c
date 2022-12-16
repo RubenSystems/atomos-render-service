@@ -122,52 +122,31 @@ static void request_render(int fd, uint32_t frame, uint32_t sec, uint32_t usec, 
 
 
 
-int set_mode(struct atomui_data *data, struct drm_mode_get_connector conn, struct drm_mode_modeinfo mode) {
-	if (!conn.encoder_id) {
-		printf("No encoder found!\n");
-		return -1;
-	}
-
-
+int set_mode(struct atomui_data * data, struct drm_mode_get_connector conn, struct drm_mode_modeinfo mode) {
 
 	struct atomui_size mode_size = {
 		.width = mode.hdisplay,
 		.height = mode.vdisplay 
 	};
-
 	struct drm_mode_get_encoder enc;
 	int ret = 0;
 
-	if (ret = atomui_get_encoder(data->fd, conn.encoder_id, &enc)) {
-		printf("Encoder load failed: %d, %d - %d - %X\n", ret, data->fd, conn.encoder_id, &enc);
-		return -1;
-	}
 
-	if (!enc.crtc_id) {
-		printf("No CRT Controller!\n");
-		return -1;
-	}
-
-	data->framebuffer[0].size.width = mode_size.width;
-	data->framebuffer[0].size.height = mode_size.height;
-	data->framebuffer[1].size.width = mode_size.width;
-	data->framebuffer[1].size.height = mode_size.height;
-
-	if (!atomui_create_framebuffer(data->fd, &data->framebuffer[0])) {
-		printf("Failed to create framebuffer 1!\n");
-		return -1;
-	}
-
-	if (!atomui_create_framebuffer(data->fd, &data->framebuffer[1])) {
-		printf("Failed to create framebuffer 2!\n");
+	// Check for issues
+	if (
+		!conn.encoder_id												||
+		(ret = atomui_get_encoder(data->fd, conn.encoder_id, &enc)) 	|| 
+		!enc.crtc_id 													||
+		!atuomui_create_dual_framebuffer(data, mode_size)
+	) {
+		// Specificity is what is important
+		printf("[ATOMUI] - FAILURE IN: connection_encoder id, getting encoder, no crtc id for encoder or in creating a dual framebuffer");
 		return -1;
 	}
 
 
+	int multitouch_fd = open("/dev/input/event0", O_RDONLY);
 	atomui_init_multitouch(&multitouch_info, mode_size);
-	printf("%f %i %i \n", multitouch_info.touch_multiplier, mode_size.width, mode_size.height);
-
-	printf("Buffer created with size: %d\n", data->framebuffer[0].size);
 
 	struct drm_mode_crtc crtc;
 	memset(&crtc, 0, sizeof(crtc));
@@ -178,12 +157,9 @@ int set_mode(struct atomui_data *data, struct drm_mode_get_connector conn, struc
 	ret = atomui_ioctl(data->fd, DRM_IOCTL_MODE_GETCRTC, &crtc);
 	saved_crtc = crtc;
 
-	printf("Get CRTC: %d = %d (%d, %d, %x, %s)\n", crtc.crtc_id, ret, crtc.fb_id, crtc.count_connectors, crtc.set_connectors_ptr, crtc.mode.name);
-
 	memset(&crtc, 0, sizeof(crtc));
-	crtc.crtc_id = enc.crtc_id;
-
 	memmove(&crtc.mode, &mode, sizeof(mode));
+	crtc.crtc_id = enc.crtc_id;
 	crtc.x = 0;
 	crtc.y = 0;
 	crtc.fb_id = data->framebuffer[0].fb;
@@ -191,12 +167,7 @@ int set_mode(struct atomui_data *data, struct drm_mode_get_connector conn, struc
 	crtc.set_connectors_ptr = (uint64_t)&conn.connector_id;
 	crtc.mode_valid = 1;
 
-	int multitouch_fd = open("/dev/input/event0", O_RDONLY);
-
-	printf("CRTC RES: %d/%d...\n", crtc.mode.hdisplay, crtc.mode.vdisplay);
-
-	// sleep(4);
-
+	
 	//about to set mode...
 	ret = atomui_ioctl(data->fd, DRM_IOCTL_MODE_SETCRTC, &crtc);
 
@@ -234,7 +205,6 @@ int set_mode(struct atomui_data *data, struct drm_mode_get_connector conn, struc
 		if (FD_ISSET(data->fd, &fds)) {
 			//drawing happened on the buffer...
 			atomui_handle_event(data->fd, &ev, event_buffer);
-			continue;
 		}
 
 		if (FD_ISSET(multitouch_fd, &fds)) {

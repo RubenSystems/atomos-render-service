@@ -223,6 +223,18 @@ bool atomui_create_framebuffer(int fd, struct atomui_buffer *buf) {
 	return true;
 }
 
+/* 
+	Returns true if it can create both frame buffers. 
+	False if not above
+*/
+bool atuomui_create_dual_framebuffer(struct atomui_data * data, struct atomui_size mode_size) {
+	data->framebuffer[0].size.width = mode_size.width;
+	data->framebuffer[0].size.height = mode_size.height;
+	data->framebuffer[1].size.width = mode_size.width;
+	data->framebuffer[1].size.height = mode_size.height;
+
+	return atomui_create_framebuffer(data->fd, &data->framebuffer[1]) && atomui_create_framebuffer(data->fd, &data->framebuffer[0]);
+}
 
 //  Helper Impl
 

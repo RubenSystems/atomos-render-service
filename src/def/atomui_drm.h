@@ -46,8 +46,12 @@ struct atomui_data {
 
 // Dont have this here
 int atomui_set_screen(struct atomui_data *, struct drm_mode_get_connector, struct drm_mode_modeinfo);
-bool atomui_create_framebuffer(int fd, struct atomui_buffer *buf);
 
+// Frame buffers 
+bool atomui_create_framebuffer(int fd, struct atomui_buffer *buf);
+bool atuomui_create_dual_framebuffer(struct atomui_data * data, struct atomui_size mode_size);
+
+// General helpers
 int atomui_ioctl(int fd, unsigned long request, void * arg);
 int atomui_open(const char * device_node);
 int atomui_get_resources(int fd, struct drm_mode_card_res * res);
@@ -56,7 +60,7 @@ int atomui_get_encoder(int fd, int id, struct drm_mode_get_encoder *enc);
 int atomui_handle_event(int fd, struct atomui_render_context *context, char * buffer);
 int atomui_get_modes(int fd, struct atomui_size size, struct drm_mode_card_res * resource, struct drm_mode_get_connector * _connector, struct drm_mode_modeinfo * _mode);
 
-//  Helper functions 
+// memory helpers 
 uint64_t reinterpret_malloc(size_t size);
 void free_drm_mode_card_res(struct drm_mode_card_res * res); 
 void free_drm_mode_get_connector(struct drm_mode_get_connector * conn);
