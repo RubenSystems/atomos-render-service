@@ -1,7 +1,7 @@
 #include "def/atomui_multitouch.h"
 #include "def/atomui_drm.h"
 
-#include <linux/input.h>
+
 #include <fcntl.h>
 #include <string.h>
 #include <sys/ioctl.h>
@@ -57,72 +57,8 @@ int main(int argc, char **argv) {
 	}
 }
 
-bool create_framebuffer(int fd, struct atomui_buffer *buf) {
-	struct drm_mode_create_dumb creq;
-	struct drm_mode_create_dumb dreq;
-	struct drm_mode_map_dumb mreq;
 
-	memset(&creq, 0, sizeof(creq));
-	creq.width = buf->size.width;
-	creq.height = buf->size.height;
-	creq.bpp = 32; // Bits per pixel (A A R R G G B B) (four bits per letter)
- 
-
-	int ret = atomui_ioctl(fd, DRM_IOCTL_MODE_CREATE_DUMB, &creq);
-
-	if (ret < 0) {
-		printf("Failed to create buffer: %d\n", ret);
-		return false;
-	}
-
-	buf->stride = creq.pitch;
-	buf->handle = creq.handle;
-
-	// TODO: - TRY OUTPUTING CREQ.SIZE and SEE IF IT IS THE SAME AS W * H
-	// buf->size = creq.size;
-
-
-
-	struct drm_mode_fb_cmd fbcmd;
-	memset(&fbcmd, 0, sizeof(fbcmd));
-	fbcmd.width = buf->size.width;
-	fbcmd.height = buf->size.height;
-	fbcmd.depth = 24;
-	fbcmd.bpp = 32;
-	fbcmd.pitch = buf->stride;
-	fbcmd.handle = buf->handle;
-
-	ret = atomui_ioctl(fd, DRM_IOCTL_MODE_ADDFB, &fbcmd);
-
-	if (ret < 0) {
-		printf("Failed to add FB: %d\n", ret);
-		return false;
-	}
-
-	buf->fb = fbcmd.fb_id;
-	memset(&mreq, 0, sizeof(mreq));
-	mreq.handle = buf->handle;
-
-	ret = atomui_ioctl(fd, DRM_IOCTL_MODE_MAP_DUMB, &mreq);
-
-	if (ret) {
-		printf("Failed to map FB: %d\n", ret);
-		return false;
-	}
-
-	buf->map = mmap(0, area_from_size(buf->size), PROT_READ | PROT_WRITE, MAP_SHARED, fd, mreq.offset);
-
-	if (buf->map == -1) {
-		printf("Failed to map FB!\n");
-		return false;
-	}
-
-	// memset(buf->map, 0, area_from_size(buf->size));
-
-	return true;
-}
-
-int cursor_size = 20;
+int cursor_size = 5;
 uint32_t bg_color = 0xFFFFFFFF ;//AARRGGBB
 uint32_t cursor_color = 0xFF333333;
 
@@ -163,6 +99,7 @@ static void draw_data(int fd, struct atomui_data *data) {
 	flip.flags = DRM_MODE_PAGE_FLIP_EVENT;
 	flip.reserved = 0;
 
+	// Send frame to be rendered
 	int ret = atomui_ioctl(fd, DRM_IOCTL_MODE_PAGE_FLIP, &flip);
 
 	if (!ret) {
@@ -173,7 +110,7 @@ static void draw_data(int fd, struct atomui_data *data) {
 	}
 }
 
-static void page_flip_event(int fd, uint32_t frame, uint32_t sec, uint32_t usec, void *data) {
+static void request_render(int fd, uint32_t frame, uint32_t sec, uint32_t usec, void *data) {
 	struct atomui_data *dev = data;
 	dev->pflip_pending = false;
 
@@ -191,6 +128,13 @@ int set_mode(struct atomui_data *data, struct drm_mode_get_connector conn, struc
 		return -1;
 	}
 
+
+
+	struct atomui_size mode_size = {
+		.width = mode.hdisplay,
+		.height = mode.vdisplay 
+	};
+
 	struct drm_mode_get_encoder enc;
 	int ret = 0;
 
@@ -204,36 +148,30 @@ int set_mode(struct atomui_data *data, struct drm_mode_get_connector conn, struc
 		return -1;
 	}
 
-	data->framebuffer[0].size.width = mode.hdisplay;
-	data->framebuffer[0].size.height = mode.vdisplay;
-	data->framebuffer[1].size.width = mode.hdisplay;
-	data->framebuffer[1].size.height = mode.vdisplay;
+	data->framebuffer[0].size.width = mode_size.width;
+	data->framebuffer[0].size.height = mode_size.height;
+	data->framebuffer[1].size.width = mode_size.width;
+	data->framebuffer[1].size.height = mode_size.height;
 
-
-
-	memset(&multitouch_info.touch_events, 0, sizeof(multitouch_info.touch_events) / sizeof(struct atomui_touch_event));
-	multitouch_info.max_x = mode.hdisplay;
-	multitouch_info.max_y = mode.vdisplay;
-	multitouch_info.current_touch_slot = 0;
-	float finger_position_multiplier = mode.vdisplay / (float)mode.hdisplay;
-	printf("%i %i %f\n", mode.vdisplay, mode.hdisplay, finger_position_multiplier);
-
-	if (!create_framebuffer(data->fd, &data->framebuffer[0])) {
+	if (!atomui_create_framebuffer(data->fd, &data->framebuffer[0])) {
 		printf("Failed to create framebuffer 1!\n");
 		return -1;
 	}
 
-	if (!create_framebuffer(data->fd, &data->framebuffer[1])) {
+	if (!atomui_create_framebuffer(data->fd, &data->framebuffer[1])) {
 		printf("Failed to create framebuffer 2!\n");
 		return -1;
 	}
+
+
+	atomui_init_multitouch(&multitouch_info, mode_size);
+	printf("%f %i %i \n", multitouch_info.touch_multiplier, mode_size.width, mode_size.height);
 
 	printf("Buffer created with size: %d\n", data->framebuffer[0].size);
 
 	struct drm_mode_crtc crtc;
 	memset(&crtc, 0, sizeof(crtc));
 	crtc.crtc_id = enc.crtc_id;
-
 	data->crt_id = enc.crtc_id;
 
 	//get the current CRTC, should be FB controller.
@@ -273,12 +211,14 @@ int set_mode(struct atomui_data *data, struct drm_mode_get_connector conn, struc
 	fd_set fds;
 	FD_ZERO(&fds);
 
-	struct atomui_event_context ev;
+	struct atomui_render_context ev;
 	memset(&ev, 0, sizeof(ev));
 	ev.version = 2;
-	ev.page_flip_handler = page_flip_event;
+	ev.render_handler = request_render;
+
 
 	char event_buffer[ATOMUI_SMALL_BUF_SIZE];
+	struct input_event multitouch_event_buffer [64];
 
 	while(true) {
 		FD_SET(0, &fds);
@@ -294,55 +234,14 @@ int set_mode(struct atomui_data *data, struct drm_mode_get_connector conn, struc
 		if (FD_ISSET(data->fd, &fds)) {
 			//drawing happened on the buffer...
 			atomui_handle_event(data->fd, &ev, event_buffer);
+			continue;
 		}
 
 		if (FD_ISSET(multitouch_fd, &fds)) {
 
-			struct input_event events [64];
-			uint8_t event_slot = 0;
-			int byte_count = read(multitouch_fd, events, sizeof(struct input_event) * 64);
-			
+			int byte_count = read(multitouch_fd, multitouch_event_buffer, sizeof(struct input_event) * 64);
+			atomui_handle_multitouch_event(&multitouch_info, multitouch_event_buffer, byte_count);
 
-			if (byte_count < sizeof(struct input_event)) {
-				continue;
-			}
-			uint8_t number_of_events = byte_count / sizeof(struct input_event);
-
-			for (uint8_t event_index = 0; event_index < number_of_events; event_index ++) {
-				struct input_event * event = &(events[event_index]);
-				switch (event->type) {
-				case EV_SYN:
-					break;
-				case EV_ABS: 
-					{
-						switch (event->code) {
-						case ABS_MT_SLOT:
-							multitouch_info.current_touch_slot = event->value;
-							break;
-						case ABS_MT_POSITION_X:
-							multitouch_info.touch_events[multitouch_info.current_touch_slot].x = event->value / finger_position_multiplier;
-							break;
-						case ABS_MT_POSITION_Y:
-							multitouch_info.touch_events[multitouch_info.current_touch_slot].y = event->value * finger_position_multiplier;
-							break;
-						case ABS_MT_TOUCH_MAJOR:
-
-							break;
-						case ABS_MT_TRACKING_ID:
-
-							if (event->value == -1) {
-								multitouch_info.touch_events[multitouch_info.current_touch_slot].active = false;
-							} else {
-								multitouch_info.touch_events[multitouch_info.current_touch_slot].active = true;
-							}
-
-							break;
-
-						}
-					}
-					break;
-				}
-			}
 		}
 	}
 

@@ -110,7 +110,7 @@ int atomui_get_encoder(int fd, int id, struct drm_mode_get_encoder *enc) {
 }
 
 
-int atomui_handle_event(int fd, struct atomui_event_context *context, char * buffer) {
+int atomui_handle_event(int fd, struct atomui_render_context *context, char * buffer) {
 	// char buffer[1024];
 	struct drm_event *e;
 
@@ -127,7 +127,7 @@ int atomui_handle_event(int fd, struct atomui_event_context *context, char * buf
 
 		if (e->type == DRM_EVENT_FLIP_COMPLETE) {
 			struct drm_event_vblank *vb = (struct drm_event_vblank *)e;
-			context->page_flip_handler(fd, vb->sequence, vb->tv_sec, vb->tv_usec, (void *)vb->user_data);
+			context->render_handler(fd, vb->sequence, vb->tv_sec, vb->tv_usec, (void *)vb->user_data);
 			break;
 		}
 	}
@@ -159,6 +159,68 @@ int atomui_get_modes(int fd, struct atomui_size size, struct drm_mode_card_res *
 		free_drm_mode_get_connector(_connector);
 	}
 	return -1; 
+}
+
+// Create framebuffer 
+
+bool atomui_create_framebuffer(int fd, struct atomui_buffer *buf) {
+	struct drm_mode_create_dumb creq;
+	struct drm_mode_create_dumb dreq;
+	struct drm_mode_map_dumb mreq;
+
+	memset(&creq, 0, sizeof(creq));
+	creq.width = buf->size.width;
+	creq.height = buf->size.height;
+	creq.bpp = 32; // Bits per pixel (A A R R G G B B) (four bits per letter)
+ 
+
+	int ret = atomui_ioctl(fd, DRM_IOCTL_MODE_CREATE_DUMB, &creq);
+
+	if (ret < 0) {
+		printf("Failed to create buffer: %d\n", ret);
+		return false;
+	}
+
+	buf->stride = creq.pitch;
+	buf->handle = creq.handle;
+
+	struct drm_mode_fb_cmd fbcmd;
+	memset(&fbcmd, 0, sizeof(fbcmd));
+	fbcmd.width = buf->size.width;
+	fbcmd.height = buf->size.height;
+	fbcmd.depth = 24;
+	fbcmd.bpp = 32; // Bits per pixel see above for expl
+	fbcmd.pitch = buf->stride;
+	fbcmd.handle = buf->handle;
+
+	ret = atomui_ioctl(fd, DRM_IOCTL_MODE_ADDFB, &fbcmd);
+
+	if (ret < 0) {
+		printf("Failed to add FB: %d\n", ret);
+		return false;
+	}
+
+	buf->fb = fbcmd.fb_id;
+	memset(&mreq, 0, sizeof(mreq));
+	mreq.handle = buf->handle;
+
+	ret = atomui_ioctl(fd, DRM_IOCTL_MODE_MAP_DUMB, &mreq);
+
+	if (ret) {
+		printf("Failed to map FB: %d\n", ret);
+		return false;
+	}
+
+	buf->map = mmap(0, area_from_size(buf->size), PROT_READ | PROT_WRITE, MAP_SHARED, fd, mreq.offset);
+
+	if (buf->map == -1) {
+		printf("Failed to map FB!\n");
+		return false;
+	}
+
+	// memset(buf->map, 0, area_from_size(buf->size));
+
+	return true;
 }
 
 

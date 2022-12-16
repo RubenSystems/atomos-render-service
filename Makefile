@@ -1,5 +1,5 @@
 CC = gcc
-C_OBJ = src/impl/atomui_drm.c src/impl/atomui_graphics.c
+C_OBJ = src/impl/atomui_drm.c src/impl/atomui_graphics.c src/impl/atomui_multitouch.c
 MAIN = src/main.c 
 TARGET = atomui
 FLAGS = -Wno-int-to-pointer-cast
