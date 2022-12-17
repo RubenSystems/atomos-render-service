@@ -1,9 +1,10 @@
-# AtomOS_UI
-User interface functionality for AtomosphereOS
+# AtomOS rendering service
 
-Will soon come with a UI framework for displaying views on operating systems with the lunix kernal. 
+Provides a layer ontop of the OS which applications or the OS can use to render UIs. It prevents the need for multiple rendering systems, each one competing for OS resources. 
 
-Works on most lunix distros as it makes use of drm-kms for displaying frame buffers. 
+In the future, it will come with its own UI library. This will allow other applications and the OS to easily (relativley, it is still C) create UIs with a unified language. 
+
+The render service handles optimisation of UIs (e.g not rendering off-screen objects) and the conversion of view instructions to framebuffers. 
 
 ### Current State 
 Features implemented: 
@@ -11,6 +12,5 @@ Features implemented:
 - Multitouch 
 
 Todo: 
-- Refactor
 - Render pipeline 
 - UI Library 
